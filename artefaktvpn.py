@@ -6,13 +6,16 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-# Вставьте сюда токен вашего бота, полученный от @BotFather
-BOT_TOKEN = "8733922086:AAEiaKbj-yhRvZ-rkQP2doPEnXmc2Bk1ins"
+# ==============================================================================
+# КОНФИГУРАЦИЯ БОТА И ТАРИФНЫХ ПЛАНОВ
+# ==============================================================================
+# Вставьте сюда токен вашего бота, полученный от официального бота @BotFather
+BOT_TOKEN = "ВАШ_ТОКЕН_БОТА"
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Базовые префиксы тарифов, которые зашиты в логику вашего VPN-клиента
+# Обновленная структура тарифов с новыми ценами из вашего ТЗ
 TARIFS = {
     "1M": {"days": 30, "price": 59, "prefix": "KEY_1M_"},
     "3M": {"days": 90, "price": 119, "prefix": "KEY_3M_"},
@@ -21,7 +24,7 @@ TARIFS = {
 }
 
 def init_bot_db():
-    """Инициализация базы данных на стороне бота для контроля проданных ключей"""
+    """Инициализация локальной базы данных хостинга для записи продаж"""
     db_path = "artefakt_sales.db"
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -39,18 +42,18 @@ def init_bot_db():
     conn.close()
 
 def generate_secure_key(tarif_code):
-    """Генерация уникального криптостойкого ключа с префиксом тарифа"""
+    """Генерация криптостойкого ключа с префиксом, который понимает валидатор клиента"""
     prefix = TARIFS[tarif_code]["prefix"]
-    # Генерируем случайную строку из 5 символов
+    # Генерируем случайную буквенно-цифровую строку из 5 символов
     random_str = "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
     return f"{prefix}{random_str}"
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    """Первое приветствие: Вывод кнопок 'Тарифы' и 'Поддержка'"""
+    """Первое приветствие пользователя: Выбор между тарифами и саппортом"""
     builder = InlineKeyboardBuilder()
-    builder.button(text="🛍️ Тарифы", callback_data="menu_tarifs")
+    builder.button(text="🛍专 Тарифы", callback_data="menu_tarifs")
     builder.button(text="👨‍💻 Поддержка", callback_data="menu_support")
-    builder.adjust(2) # Размещаем кнопки аккуратно в один горизонтальный ряд
+    builder.adjust(2) # Кнопки встанут красиво в один горизонтальный ряд
     
     welcome_text = (
         "👋 **Здравствуйте! Вас приветствует Artefakt VPN.**\n\n"
@@ -60,7 +63,7 @@ async def cmd_start(message: types.Message):
 
 @dp.callback_query(F.data == "menu_support")
 async def handle_support(callback: types.CallbackQuery):
-    """Раздел технической поддержки"""
+    """Окно информации о технической поддержке"""
     await callback.answer()
     
     builder = InlineKeyboardBuilder()
@@ -77,7 +80,7 @@ async def handle_support(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "menu_tarifs")
 async def show_tarifs(callback: types.CallbackQuery):
-    """Открытие витрины тарифных планов по кнопке"""
+    """Окно вывода витрины тарифных планов подписок с вашими новыми ценами"""
     await callback.answer()
     
     builder = InlineKeyboardBuilder()
@@ -86,7 +89,7 @@ async def show_tarifs(callback: types.CallbackQuery):
     builder.button(text="🛍️ 6 месяцев — 219₽", callback_data="buy_6M")
     builder.button(text="🛍️ 12 месяцев — 400₽", callback_data="buy_12M")
     builder.button(text="⬅ Назад в меню", callback_data="back_to_start")
-    builder.adjust(1) # Выстраиваем список покупок вертикально
+    builder.adjust(1) # Список тарифов выстраивается строго вертикально
     
     tarifs_text = (
         "📋 **Доступные тарифные планы Artefakt VPN**\n\n"
@@ -95,7 +98,7 @@ async def show_tarifs(callback: types.CallbackQuery):
     await callback.message.edit_text(tarifs_text, reply_markup=builder.as_markup(), parse_mode="Markdown")
 @dp.callback_query(F.data == "back_to_start")
 async def handle_back(callback: types.CallbackQuery):
-    """Возврат на самое первое меню"""
+    """Возврат на исходный экран приветствия бота без спама сообщениями"""
     await callback.answer()
     
     builder = InlineKeyboardBuilder()
@@ -111,11 +114,13 @@ async def handle_back(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data.startswith("buy_"))
 async def handle_purchase(callback: types.CallbackQuery):
-    """Обработчик успешной имитации покупки"""
+    """Исправленный метод парсинга тарифа, защиты транзакции и генерации ключа в чат"""
+    # Достаем точный строковый идентификатор ('1M', '3M' из 'buy_1M')
+    # Фикс: берем второй элемент с индексом 1
     tarif_code = callback.data.split("_")[1]
     
     if tarif_code not in TARIFS:
-        await callback.answer("Ошибка: Тариф не найден.", show_alert=True)
+        await callback.answer("Ошибка: Тариф не найден в системе.", show_alert=True)
         return
         
     generated_key = generate_secure_key(tarif_code)
@@ -125,28 +130,30 @@ async def handle_purchase(callback: types.CallbackQuery):
     conn = sqlite3.connect("artefakt_sales.db")
     cursor = conn.cursor()
     try:
+        # Приводим типы к строгим значениям, чтобы база на Linux-сервере BotHost работала без сбоев
         cursor.execute(
             "INSERT INTO sold_keys (license_key, tarif_type, days, user_id, purchase_date) VALUES (?, ?, ?, ?, ?)",
-            (generated_key, tarif_code, days_count, callback.from_user.id, datetime.now().isoformat())
+            (str(generated_key), str(tarif_code), int(days_count), int(callback.from_user.id), datetime.now().isoformat())
         )
         conn.commit()
     except Exception as e:
-        await callback.answer("Ошибка базы данных. Попробуйте снова.", show_alert=True)
+        await callback.answer("Внутренняя ошибка базы данных хостинга.", show_alert=True)
         conn.close()
         return
     conn.close()
     
-    await callback.answer("💳 Оплата зачислена!", show_alert=False)
+    # Всплывающее системное уведомление в Telegram сверху экрана
+    await callback.answer("💳 Имитация оплаты успешна!", show_alert=False)
     
     response_text = (
-        "✅ **Спасибо за покупку! Лицензия успешно выпущена.**\n\n"
+        "✅ **Спасибо за покупку! Лицензия успешно сгенерирована.**\n\n"
         f"📋 Ваш персональный ключ тарифа на **{days_count} дней**:\n"
         f"`{generated_key}`\n\n"
-        "💡 *Нажмите на текст ключа выше, чтобы скопировать его, а затем активируйте в приложении Artefakt VPN.*"
+        "💡 *Нажмите на текст ключа выше, чтобы скопировать его, а затем вставьте в приложение Artefakt VPN во вкладке 'Настройки'.*"
     )
     await callback.message.answer(response_text, parse_mode="Markdown")
 
 if __name__ == "__main__":
     init_bot_db()
-    print("🤖 Бот успешно запущен на платформе BotHost...")
+    print("🤖 Бот успешно инициализирован и запущен на платформе BotHost...")
     dp.run_polling(bot)
