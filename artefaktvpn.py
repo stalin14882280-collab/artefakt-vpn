@@ -13,7 +13,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 # Вставьте сюда ваш токен бота от @BotFather (например: "723456789:ABC...")
 BOT_TOKEN = "8733922086:AAEiaKbj-yhRvZ-rkQP2doPEnXmc2Bk1ins"  
 
-# 🪙 БОЕВОЙ ТОКЕН CRYPTO PAY УСПЕШНО ИНТЕГРИРОВАН
+# БОЕВОЙ ТОКЕН CRYPTO PAY УСПЕШНО ИНТЕГРИРОВАН
 CRYPTO_PAY_TOKEN = "611765:AAza7J4I0y5aQgCEz2FGi4QUymjXMvXnbfs"
 # ==============================================================================
 
@@ -62,21 +62,22 @@ async def cmd_start(message: types.Message):
     
     welcome_text = (
         "👋 **Здравствуйте! Вас приветствует Artefakt VPN.**\n\n"
-        "What interests you?"
+        "Что вас интересует?"
     )
     await message.answer(welcome_text, reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 @dp.callback_query(F.data == "menu_support")
 async def handle_support(callback: types.CallbackQuery):
-    """Экран с контактами администратора саппорта"""
+    """Экран с контактами администратора саппорта (исправлена ошибка markdown)"""
     await callback.answer()
     builder = InlineKeyboardBuilder()
     builder.button(text="⬅ Назад", callback_data="back_to_start")
     
+    # ФИКС: Символ нижнего подчеркивания экранирован через обратный слэш
     support_text = (
         "👨‍💻 **Служба поддержки Artefakt VPN**\n\n"
         "Если у вас возникли вопросы по оплате или работе клиента, напишите администратору:\n\n"
-        "👉 **Личный контакт:** @artefakt_tg"
+        "👉 **Личный контакт:** @artefakt\_tg"
     )
     await callback.message.edit_text(support_text, reply_markup=builder.as_markup(), parse_mode="Markdown")
 
@@ -107,6 +108,7 @@ async def handle_back(callback: types.CallbackQuery):
 async def handle_purchase(callback: types.CallbackQuery):
     """Выставление счета в Crypto Pay"""
     raw_data = callback.data.split("_")
+    # ФИКС: Вырезаем чистую строку тарифа (например, '1M' из 'buy_1M')
     tarif_code = raw_data[1] if len(raw_data) > 1 else None
     
     if not tarif_code or tarif_code not in TARIFS: return
