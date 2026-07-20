@@ -2,69 +2,57 @@ import os
 import sqlite3
 import random
 import string
-import requests
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 # ==============================================================================
-# КОНФИГУРАЦИЯ БОТА И ПЛАТЕЖНОЙ СИСТЕМЫ CRYPTO PAY
+# КОНФИГУРАЦИЯ БОТА И ОПЛАТЫ ЗВЁЗДАМИ (TELEGRAM STARS)
 # ==============================================================================
-# Вставьте сюда ваш токен бота от @BotFather (например: "723456789:ABC...")
+# Вставьте сюда ваш токен бота от @BotFather
 BOT_TOKEN = "8733922086:AAEiaKbj-yhRvZ-rkQP2doPEnXmc2Bk1ins"  
-
-# 🪙 БОЕВОЙ ТОКЕН CRYPTO PAY УСПЕШНО ИНТЕГРИРОВАН
-CRYPTO_PAY_TOKEN = "611765:AAza7J4I0y5aQgCEz2FGi4QUymjXMvXnbfs"
-# ==============================================================================
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Тарифная сетка с ценами в рублях (автоматически конвертируется в USDT при покупке)
+# Обновленная тарифная сетка: все цены умножены на коэффициент 1.2
 TARIFS = {
-    "1M": {"days": 30, "price": 59, "prefix": "KEY_1M_", "name": "VPN 1 Месяц"},
-    "3M": {"days": 90, "price": 119, "prefix": "KEY_3M_", "name": "VPN 3 Месяца"},
-    "6M": {"days": 180, "price": 219, "prefix": "KEY_6M_", "name": "VPN 6 Месяцев"},
-    "12M": {"days": 365, "price": 400, "prefix": "KEY_12M_", "name": "VPN 12 Месяцев"}
+    "1M": {"days": 30, "stars": 36, "prefix": "KEY_1M_", "name": "VPN подписка на 1 месяц"},
+    "3M": {"days": 90, "stars": 72, "prefix": "KEY_3M_", "name": "VPN подписка на 3 месяца"},
+    "6M": {"days": 180, "stars": 132, "prefix": "KEY_6M_", "name": "VPN подписка на 6 месяцев"},
+    "12M": {"days": 365, "stars": 240, "prefix": "KEY_12M_", "name": "VPN подписка на 12 месяцев"}
 }
 
-def create_crypto_invoice(amount, desc):
-    """Исправленный метод выставления счета через официальное рабочее зеркало API"""
-    try:
-        # Узнаем текущий курс доллара к рублю
-        rate_res = requests.get("https://coingecko.com", timeout=5).json()
-        usdt_in_rub = rate_res.get("tether", {}).get("rub", 91.0)
-        
-        # Переводим рубли в USDT (например, 59 рублей -> ~0.65 USDT)
-        crypto_amount = round(float(amount) / usdt_in_rub, 2)
-        if crypto_amount < 0.01: crypto_amount = 0.01
+def init_bot_db():
+    """Инициализация базы данных продаж на хостинге"""
+    db_path = "artefakt_sales.db"
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sold_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            license_key TEXT UNIQUE,
+            tarif_type TEXT,
+            days INTEGER,
+            user_id INTEGER,
+            purchase_date TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-        # ФИКС: Используем стабильное официальное зеркало API Crypto Pay вместо заблокированного
-        url = "https://crypto-pay.io"
-        headers = {"Crypto-Pay-API-Token": CRYPTO_PAY_TOKEN}
-        payload = {
-            "asset": "USDT",
-            "amount": str(crypto_amount),
-            "description": str(desc)
-        }
-        res = requests.post(url, json=payload, headers=headers, timeout=10).json()
-        
-        # Защита: Вывод ошибок кассы в консоль (логи больше не будут пустыми)
-        if not res.get("ok"):
-            print(f"⚠️ Ошибка от Crypto Pay API: {res}")
-            return None, None
-            
-        return res["result"]["pay_url"], res["result"]["invoice_id"]
-    except Exception as e:
-        print(f"❌ Критическая ошибка сетевого запроса: {e}")
-    return None, None
+def generate_secure_key(tarif_code):
+    """Генерация ключа для вашего PyQt6 Windows-приложения"""
+    prefix = TARIFS[tarif_code]["prefix"]
+    random_str = "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    return f"{prefix}{random_str}"
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    """Приветственное окно главного меню"""
+    """Главный экран"""
     builder = InlineKeyboardBuilder()
     builder.button(text="🛍️ Тарифы", callback_data="menu_tarifs")
     builder.button(text="👨‍💻 Поддержка", callback_data="menu_support")
-    builder.adjust(2) # Кнопки встанут красиво в один горизонтальный ряд
+    builder.adjust(2)
     
     welcome_text = (
         "👋 **Здравствуйте! Вас приветствует Artefakt VPN.**\n\n"
@@ -74,12 +62,11 @@ async def cmd_start(message: types.Message):
 
 @dp.callback_query(F.data == "menu_support")
 async def handle_support(callback: types.CallbackQuery):
-    """Экран с контактами администратора саппорта (исправлена ошибка разметки)"""
+    """Экран техподдержки с экранированием юзернейма"""
     await callback.answer()
     builder = InlineKeyboardBuilder()
     builder.button(text="⬅ Назад", callback_data="back_to_start")
     
-    # ФИКС: Символ нижнего подчеркивания экранирован через обратный слэш
     support_text = (
         "👨‍💻 **Служба поддержки Artefakt VPN**\n\n"
         "Если у вас возникли вопросы по оплате или работе клиента, напишите администратору:\n\n"
@@ -89,21 +76,20 @@ async def handle_support(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "menu_tarifs")
 async def show_tarifs(callback: types.CallbackQuery):
-    """Экран вывода витрины цен подписок"""
+    """Витрина планов со звёздами (текст кнопок обновлен под новые цены)"""
     await callback.answer()
     builder = InlineKeyboardBuilder()
-    builder.button(text="🛍️ 1 месяц — 59₽", callback_data="buy_1M")
-    builder.button(text="🛍️ 3 месяца — 119₽", callback_data="buy_3M")
-    builder.button(text="🛍️ 6 месяцев — 219₽", callback_data="buy_6M")
-    builder.button(text="🛍️ 12 месяцев — 400₽", callback_data="buy_12M")
+    builder.button(text="⭐️ 1 месяц — 36 XTR", callback_data="buy_1M")
+    builder.button(text="⭐️ 3 месяца — 72 XTR", callback_data="buy_3M")
+    builder.button(text="⭐️ 6 месяцев — 132 XTR", callback_data="buy_6M")
+    builder.button(text="⭐️ 12 месяцев — 240 XTR", callback_data="buy_12M")
     builder.button(text="⬅ Назад в меню", callback_data="back_to_start")
-    builder.adjust(1) # Выстраиваем тарифы вертикально в список
+    builder.adjust(1)
     
-    await callback.message.edit_text("📋 **Выберите подходящий тарифный план для покупки:**", reply_markup=builder.as_markup(), parse_mode="Markdown")
+    await callback.message.edit_text("📋 **Выберите подходящий тарифный план для покупки за Звёзды:**", reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 @dp.callback_query(F.data == "back_to_start")
 async def handle_back(callback: types.CallbackQuery):
-    """Кнопка возврата в корневой раздел"""
     await callback.answer()
     builder = InlineKeyboardBuilder()
     builder.button(text="🛍️ Тарифы", callback_data="menu_tarifs")
@@ -112,57 +98,39 @@ async def handle_back(callback: types.CallbackQuery):
     await callback.message.edit_text("👋 **Здравствуйте! Вас приветствует Artefakt VPN.**\n\nЧто вас интересует?", reply_markup=builder.as_markup(), parse_mode="Markdown")
 @dp.callback_query(F.data.startswith("buy_"))
 async def handle_purchase(callback: types.CallbackQuery):
-    """Выставление счета в Crypto Pay"""
+    """Выставление официального счета Telegram Stars напрямую в чат"""
+    await callback.answer()
     raw_data = callback.data.split("_")
-    # ФИКС: Корректное вырезание чистой строки тарифа из списка параметров
     tarif_code = raw_data[1] if len(raw_data) > 1 else None
     
     if not tarif_code or tarif_code not in TARIFS: return
     
-    price = TARIFS[tarif_code]["price"]
+    stars_price = TARIFS[tarif_code]["stars"]
     name = TARIFS[tarif_code]["name"]
     
-    pay_url, invoice_id = create_crypto_invoice(price, name)
-    
-    if not pay_url:
-        await callback.answer("❌ Ошибка связи с Crypto Pay API. Попробуйте позже.", show_alert=True)
-        return
-    
-    builder = InlineKeyboardBuilder()
-    builder.button(text="🪙 Оплатить в CryptoBot", url=pay_url)
-    builder.button(text="🔄 Проверить оплату", callback_data=f"check_{invoice_id}_{tarif_code}")
-    builder.button(text="⬅ Назад", callback_data="menu_tarifs")
-    builder.adjust(1)
-    
-    await callback.message.edit_text(
-        f"💸 **Счет в системе Crypto Pay готов!**\n\n"
-        f"📦 **Товар:** {name}\n"
-        f"💰 **Стоимость в рублях:** {price}₽\n\n"
-        f"Нажмите кнопку ниже для перехода в безопасное окно оплаты Telegram. После подтверждения перевода вернитесь сюда и нажмите кнопку проверки.",
-        reply_markup=builder.as_markup(), parse_mode="Markdown"
+    # Отправляем инвойс встроенным методом Telegram (без сторонних платежек!)
+    await bot.send_invoice(
+        chat_id=callback.message.chat.id,
+        title=name,
+        description=f"Активационный ключ подписки для ПК-приложения Artefakt VPN на {TARIFS[tarif_code]['days']} дней.",
+        payload=f"payload_{tarif_code}",
+        provider_token="", # Для Telegram Stars это поле ОСТАЕТСЯ ПУСТЫМ!
+        currency="XTR",   # Код валюты Telegram Stars
+        prices=[types.LabeledPrice(label=name, amount=stars_price)]
     )
 
-@dp.callback_query(F.data.startswith("check_"))
-async def check_payment_status(callback: types.CallbackQuery):
-    """Автоматическая верификация транзакции через официальное API"""
-    _, invoice_id, tarif_code = callback.data.split("_")
-    
-    is_paid = False
-    try:
-        # ФИКС: Проверка статуса счета переведена на стабильный рабочий эндпоинт
-        url = "https://crypto-pay.io"
-        headers = {"Crypto-Pay-API-Token": CRYPTO_PAY_TOKEN}
-        payload = {"invoice_ids": str(invoice_id)}
-        res = requests.post(url, json=payload, headers=headers, timeout=10).json()
-        if res.get("ok") and len(res["result"]["items"]) > 0:
-            if res["result"]["items"][0]["status"] == "paid":
-                is_paid = True
-    except Exception as e:
-        print(f"⚠️ Ошибка при проверке счета в базе: {e}")
+@dp.pre_checkout_query()
+async def process_pre_checkout(pre_checkout_query: types.PreCheckoutQuery):
+    """Обязательное автоматическое подтверждение готовности принять платеж от Telegram"""
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
 
-    if not is_paid:
-        await callback.answer("❌ Оплата еще не зафиксирована сетью. Оплатите счет или попробуйте еще раз.", show_alert=True)
-        return
+@dp.message(F.successful_payment)
+async def process_successful_payment(message: types.Message):
+    """Событие успешной оплаты: вызывается автоматически самим Telegram сразу после списания звёзд"""
+    payload = message.successful_payment.invoice_payload
+    tarif_code = payload.split("_")[1]
+    
+    if tarif_code not in TARIFS: return
 
     generated_key = generate_secure_key(tarif_code)
     days_count = TARIFS[tarif_code]["days"]
@@ -172,40 +140,22 @@ async def check_payment_status(callback: types.CallbackQuery):
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO sold_keys (license_key, tarif_type, days, user_id, purchase_date) VALUES (?, ?, ?, ?, ?)",
-                       (str(generated_key), str(tarif_code), int(days_count), int(callback.from_user.id), datetime.now().isoformat()))
+                       (str(generated_key), str(tarif_code), int(days_count), int(message.from_user.id), datetime.now().isoformat()))
         conn.commit()
-    except:
-        await callback.answer("Ключ для этой сессии уже выдавался.", show_alert=True)
-        conn.close()
-        return
+    except Exception as e:
+        print(f"Ошибка сохранения ключа: {e}")
     conn.close()
     
-    await callback.answer("🎉 Платеж успешно подтвержден!", show_alert=True)
-    await callback.message.answer(
-        f"✅ **Спасибо! Оплата зачислена автоматически.**\n\n"
+    # Выдаем ключ пользователю. Оплата 100% автоматическая, никаких кнопок проверки нажимать не нужно!
+    await message.answer(
+        f"🎉 **Оплата звёздами успешно принята!**\n\n"
         f"📋 Ваш персональный лицензионный ключ на **{days_count} дней**:\n"
         f"`{generated_key}`\n\n"
-        f"💡 Скопируйте его кликом по тексту и вставьте в настройки ПК-клиента Artefakt VPN.", parse_mode="Markdown"
+        f"💡 Скопируйте его кликом по тексту выше и вставьте в настройки ПК-клиента Artefakt VPN. Спасибо за покупку!",
+        parse_mode="Markdown"
     )
-
-def init_bot_db():
-    conn = sqlite3.connect("artefakt_sales.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS sold_keys (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, license_key TEXT UNIQUE,
-            tarif_type TEXT, days INTEGER, user_id INTEGER, purchase_date TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-def generate_secure_key(tarif_code):
-    prefix = TARIFS[tarif_code]["prefix"]
-    random_str = "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
-    return f"{prefix}{random_str}"
 
 if __name__ == "__main__":
     init_bot_db()
-    print("🤖 Анонимный бот на Crypto Pay успешно запущен на BotHost...")
+    print("🤖 Бот на официальной платежной системе Telegram Stars запущен на BotHost...")
     dp.run_polling(bot)
