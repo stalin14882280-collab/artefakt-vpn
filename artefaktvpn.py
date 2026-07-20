@@ -15,7 +15,7 @@ BOT_TOKEN = "8733922086:AAEiaKbj-yhRvZ-rkQP2doPEnXmc2Bk1ins"
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Обновленная структура тарифов с новыми ценами из вашего ТЗ
+# Структура тарифов с обновленной стоимостью подписок
 TARIFS = {
     "1M": {"days": 30, "price": 59, "prefix": "KEY_1M_"},
     "3M": {"days": 90, "price": 119, "prefix": "KEY_3M_"},
@@ -51,7 +51,7 @@ def generate_secure_key(tarif_code):
 async def cmd_start(message: types.Message):
     """Первое приветствие пользователя: Выбор между тарифами и саппортом"""
     builder = InlineKeyboardBuilder()
-    builder.button(text="🛍专 Тарифы", callback_data="menu_tarifs")
+    builder.button(text="🛍️ Тарифы", callback_data="menu_tarifs")
     builder.button(text="👨‍💻 Поддержка", callback_data="menu_support")
     builder.adjust(2) # Кнопки встанут красиво в один горизонтальный ряд
     
@@ -80,7 +80,7 @@ async def handle_support(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "menu_tarifs")
 async def show_tarifs(callback: types.CallbackQuery):
-    """Окно вывода витрины тарифных планов подписок с вашими новыми ценами"""
+    """Окно вывода витрины тарифных планов подписок со всеми исправлениями текста"""
     await callback.answer()
     
     builder = InlineKeyboardBuilder()
@@ -115,11 +115,11 @@ async def handle_back(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("buy_"))
 async def handle_purchase(callback: types.CallbackQuery):
     """Исправленный метод парсинга тарифа, защиты транзакции и генерации ключа в чат"""
-    # Достаем точный строковый идентификатор ('1M', '3M' из 'buy_1M')
-    # Фикс: берем второй элемент с индексом 1
-    tarif_code = callback.data.split("_")[1]
+    # Достаем точный строковый идентификатор тарифа (например, '1M', '3M' из строки 'buy_1M')
+    raw_data = callback.data.split("_")
+    tarif_code = raw_data[1] if len(raw_data) > 1 else None
     
-    if tarif_code not in TARIFS:
+    if not tarif_code or tarif_code not in TARIFS:
         await callback.answer("Ошибка: Тариф не найден в системе.", show_alert=True)
         return
         
@@ -130,7 +130,7 @@ async def handle_purchase(callback: types.CallbackQuery):
     conn = sqlite3.connect("artefakt_sales.db")
     cursor = conn.cursor()
     try:
-        # Приводим типы к строгим значениям, чтобы база на Linux-сервере BotHost работала без сбоев
+        # Приводим типы к строгим значениям для стабильной записи
         cursor.execute(
             "INSERT INTO sold_keys (license_key, tarif_type, days, user_id, purchase_date) VALUES (?, ?, ?, ?, ?)",
             (str(generated_key), str(tarif_code), int(days_count), int(callback.from_user.id), datetime.now().isoformat())
