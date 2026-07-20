@@ -10,7 +10,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 # КОНФИГУРАЦИЯ БОТА И ТАРИФНЫХ ПЛАНОВ
 # ==============================================================================
 # Вставьте сюда токен вашего бота, полученный от официального бота @BotFather
-BOT_TOKEN = "ВАШ_ТОКЕН_БОТА"
+BOT_TOKEN = "8733922086:AAEiaKbj-yhRvZ-rkQP2doPEnXmc2Bk1ins"
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
