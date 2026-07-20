@@ -14,10 +14,10 @@ dp = Dispatcher()
 
 # Базовые префиксы тарифов, которые зашиты в логику вашего VPN-клиента
 TARIFS = {
-    "1M": {"days": 30, "price": 150, "prefix": "KEY_1M_"},
-    "3M": {"days": 90, "price": 400, "prefix": "KEY_3M_"},
-    "6M": {"days": 180, "price": 750, "prefix": "KEY_6M_"},
-    "12M": {"days": 365, "price": 1300, "prefix": "KEY_12M_"}
+    "1M": {"days": 30, "price": 59, "prefix": "KEY_1M_"},
+    "3M": {"days": 90, "price": 119, "prefix": "KEY_3M_"},
+    "6M": {"days": 180, "price": 219, "prefix": "KEY_6M_"},
+    "12M": {"days": 365, "price": 400, "prefix": "KEY_12M_"}
 }
 
 def init_bot_db():
@@ -81,10 +81,10 @@ async def show_tarifs(callback: types.CallbackQuery):
     await callback.answer()
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="🛍️ 1 месяц — 150₽", callback_data="buy_1M")
-    builder.button(text="🛍️ 3 месяца — 400₽", callback_data="buy_3M")
-    builder.button(text="🛍️ 6 месяцев — 750₽", callback_data="buy_6M")
-    builder.button(text="🛍️ 12 месяцев — 1300₽", callback_data="buy_12M")
+    builder.button(text="🛍️ 1 месяц — 59₽", callback_data="buy_1M")
+    builder.button(text="🛍️ 3 месяца — 119₽", callback_data="buy_3M")
+    builder.button(text="🛍️ 6 месяцев — 219₽", callback_data="buy_6M")
+    builder.button(text="🛍️ 12 месяцев — 400₽", callback_data="buy_12M")
     builder.button(text="⬅ Назад в меню", callback_data="back_to_start")
     builder.adjust(1) # Выстраиваем список покупок вертикально
     
